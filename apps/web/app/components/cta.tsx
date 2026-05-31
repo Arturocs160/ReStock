@@ -1,9 +1,11 @@
 'use client';
 import { useState } from "react";
 import { Check, AlertCircle, Loader } from "lucide-react";
+import { interestSchema } from "@/lib/validations";
 
 export function CTA() {
-  const [form, setForm] = useState({ name: "", business: "", phone: "" });
+  const [form, setForm] = useState({ nombre: "", negocio: "", telefono: "" });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,15 +14,29 @@ export function CTA() {
     return Number(localStorage.getItem("restock_signups") ?? 127);
   });
 
-  const onChange = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const onChange = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
+    setFieldErrors((prev) => ({ ...prev, [k]: "" }));
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.business || !/^[\d+\s()-]{7,}$/.test(form.phone)) return;
+    setFieldErrors({});
+    setError(null);
+
+    // Validar con el esquema
+    const result = interestSchema.safeParse(form);
+    if (!result.success) {
+      const errors: Record<string, string> = {};
+      result.error.issues.forEach((err) => {
+        const field = err.path[0] as string;
+        errors[field] = err.message;
+      });
+      setFieldErrors(errors);
+      return;
+    }
     
     setLoading(true);
-    setError(null);
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3010';
@@ -29,27 +45,18 @@ export function CTA() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          nombre: form.name,
-          negocio: form.business,
-          telefono: form.phone,
-        }),
+        body: JSON.stringify(form),
       });
 
       if (!response.ok) {
-        throw new Error('Error al registrar el interés');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Error al registrar el interés');
       }
 
       const next = count + 1;
       setCount(next);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("restock_signups", String(next));
-        const list = JSON.parse(localStorage.getItem("restock_leads") ?? "[]");
-        list.push({ ...form, at: new Date().toISOString() });
-        localStorage.setItem("restock_leads", JSON.stringify(list));
-      }
       setSubmitted(true);
-      setForm({ name: "", business: "", phone: "" });
+      setForm({ nombre: "", negocio: "", telefono: "" });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
       console.error('Error submitting form:', err);
@@ -63,7 +70,6 @@ export function CTA() {
       <div
         className="mx-auto max-w-5xl rounded-3xl p-10 md:p-16 text-white relative overflow-hidden bg-[#00a365] shadow-[0_10px_40px_rgba(0,163,101,0.15)]"
       >
-        {/* Patrón de puntos decorativos de fondo */}
         <div
           className="absolute inset-0 opacity-15 pointer-events-none"
           style={{
@@ -73,7 +79,6 @@ export function CTA() {
         />
         
         <div className="relative grid md:grid-cols-2 gap-12 items-center z-10">
-          {/* Bloque Izquierdo: Textos */}
           <div>
             <h2 className="text-3xl md:text-[44px] font-extrabold leading-[1.1] tracking-tight">
               Empieza a cuidar tu inventario hoy.
@@ -86,54 +91,68 @@ export function CTA() {
             </p>
           </div>
 
-          {/* Bloque Derecho: Formulario */}
           <form
             onSubmit={onSubmit}
             className="bg-[#fcfdfd] text-gray-900 rounded-2xl p-6 md:p-8 space-y-5 shadow-xl border border-white/20"
           >
             <div className="flex flex-col gap-2">
-              <label htmlFor="cta-name" className="text-sm font-bold text-gray-800">
+              <label htmlFor="cta-nombre" className="text-sm font-bold text-gray-800">
                 Nombre
               </label>
               <input
-                id="cta-name"
+                id="cta-nombre"
                 required
                 type="text"
-                value={form.name}
-                onChange={onChange("name")}
+                value={form.nombre}
+                onChange={onChange("nombre")}
                 placeholder="Tu nombre"
-                className="w-full h-11 px-4 rounded-xl border border-gray-200/90 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#00a365] focus:ring-1 focus:ring-[#00a365] transition shadow-sm"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors.nombre ? 'border-red-500' : 'border-gray-200/90'} bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#00a365] focus:ring-1 focus:ring-[#00a365] transition shadow-sm`}
               />
+              {fieldErrors.nombre && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {fieldErrors.nombre}
+                </p>
+              )}
             </div>
             
             <div className="flex flex-col gap-2">
-              <label htmlFor="cta-business" className="text-sm font-bold text-gray-800">
+              <label htmlFor="cta-negocio" className="text-sm font-bold text-gray-800">
                 Negocio
               </label>
               <input
-                id="cta-business"
+                id="cta-negocio"
                 required
                 type="text"
-                value={form.business}
-                onChange={onChange("business")}
+                value={form.negocio}
+                onChange={onChange("negocio")}
                 placeholder="Abarrotes Don Pepe"
-                className="w-full h-11 px-4 rounded-xl border border-gray-200/90 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#00a365] focus:ring-1 focus:ring-[#00a365] transition shadow-sm"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors.negocio ? 'border-red-500' : 'border-gray-200/90'} bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#00a365] focus:ring-1 focus:ring-[#00a365] transition shadow-sm`}
               />
+              {fieldErrors.negocio && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {fieldErrors.negocio}
+                </p>
+              )}
             </div>
             
             <div className="flex flex-col gap-2">
-              <label htmlFor="cta-phone" className="text-sm font-bold text-gray-800">
+              <label htmlFor="cta-telefono" className="text-sm font-bold text-gray-800">
                 Número de teléfono
               </label>
               <input
-                id="cta-phone"
+                id="cta-telefono"
                 type="tel"
                 required
-                value={form.phone}
-                onChange={onChange("phone")}
-                placeholder="+52 555 123 4567"
-                className="w-full h-11 px-4 rounded-xl border border-gray-200/90 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#00a365] focus:ring-1 focus:ring-[#00a365] transition shadow-sm"
+                value={form.telefono}
+                onChange={onChange("telefono")}
+                placeholder="+52 5551234567"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors.telefono ? 'border-red-500' : 'border-gray-200/90'} bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#00a365] focus:ring-1 focus:ring-[#00a365] transition shadow-sm`}
               />
+              {fieldErrors.telefono && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {fieldErrors.telefono}
+                </p>
+              )}
             </div>
             
             <button 
@@ -152,7 +171,7 @@ export function CTA() {
             
             {submitted && (
               <p className="text-sm text-emerald-600 font-semibold flex items-center gap-2 mt-2 justify-center bg-emerald-50 py-2 rounded-xl border border-emerald-100">
-                <Check className="w-4 h-4 stroke-[3]" /> ¡Gracias! Te contactaremos pronto.
+                <Check className="w-4 h-4 stroke-3" /> ¡Gracias! Te contactaremos pronto.
               </p>
             )}
 
